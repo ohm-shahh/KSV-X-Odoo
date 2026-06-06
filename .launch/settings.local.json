@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/xampp/mysql/bin/mysql.exe -u root -P 3307 -h 127.0.0.1 -e \"SHOW DATABASES; SELECT 'vendorbridge tables:' AS info; USE vendorbridge; SHOW TABLES; SELECT COUNT\\(*\\) AS user_count FROM users;\")",
+      "Bash(/c/xampp/php/php.exe -r \"echo password_hash\\('password123', PASSWORD_BCRYPT\\);\")",
+      "Bash(/c/xampp/mysql/bin/mysql.exe -u root -P 3307 -h 127.0.0.1 vendorbridge)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -m 10 -X POST http://localhost/vendorbridge-backend/api/auth/login.php -H 'Content-Type: application/json' -d '{\"email\":\"admin@vendorbridge.test\",\"password\":\"password123\"}')",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -m 5 -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -m 5 -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost/vendorbridge-backend/api/health/ping.php)",
+      "Bash(tasklist)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 28480 //F)"
+    ]
+  }
+}

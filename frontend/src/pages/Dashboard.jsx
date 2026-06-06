@@ -9,11 +9,16 @@ import { Plus, UserPlus, ArrowRight } from 'lucide-react';
 
 export default function Dashboard() {
   const { data, loading, error, reload } = useFetch(async () => {
-    const [stats, pos] = await Promise.all([
+    // Vendors can't read org-wide analytics (reports/dashboard is admin/officer/manager),
+    // so tolerate a 403 there and still show what this role is allowed to see.
+    const [stats, pos] = await Promise.allSettled([
       reportsApi.dashboard(),
       purchaseOrdersApi.list(),
     ]);
-    return { stats, pos };
+    return {
+      stats: stats.status === 'fulfilled' ? stats.value : {},
+      pos: pos.status === 'fulfilled' ? pos.value : [],
+    };
   }, []);
 
   const stats = data?.stats || {};
