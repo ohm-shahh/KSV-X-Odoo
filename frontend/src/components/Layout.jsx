@@ -1,26 +1,37 @@
 import React, { useContext } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../context/ThemeContext';
-import { 
-  LayoutDashboard, Users, FileText, ClipboardList, 
-  CheckSquare, ShoppingBag, Receipt, BarChart3, Activity, Sun, Moon 
+import { AuthContext } from '../context/authContextValue';
+import {
+  LayoutDashboard, Users, FileText, ClipboardList,
+  CheckSquare, ShoppingBag, Receipt, BarChart3, Activity, Sun, Moon, LogOut
 } from 'lucide-react';
 
+// `roles` omitted = visible to everyone. Otherwise only those roles see the link.
 const sidebarItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { name: 'Vendors', icon: Users, path: '/vendors' },
-  { name: "RFQ's", icon: FileText, path: '/create-rfq' },
+  { name: 'Vendors', icon: Users, path: '/vendors', roles: ['admin', 'officer', 'manager'] },
+  { name: "RFQ's", icon: FileText, path: '/create-rfq', roles: ['admin', 'officer'] },
   { name: 'Quotations', icon: ClipboardList, path: '/quotations' },
-  { name: 'Approvals', icon: CheckSquare, path: '/approvals' },
+  { name: 'Approvals', icon: CheckSquare, path: '/approvals', roles: ['admin', 'manager'] },
   { name: 'Purchase orders', icon: ShoppingBag, path: '/purchase-orders' },
   { name: 'Invoices', icon: Receipt, path: '/invoices' },
-  { name: 'Reports', icon: BarChart3, path: '/reports' },
-  { name: 'Activity', icon: Activity, path: '/activity' }
+  { name: 'Reports', icon: BarChart3, path: '/reports', roles: ['admin', 'officer', 'manager'] },
+  { name: 'Activity', icon: Activity, path: '/activity', roles: ['admin'] }
 ];
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isDark, toggleTheme } = useContext(ThemeContext);
+  const { user, logout } = useContext(AuthContext);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  const initials = (user?.email || 'VB').slice(0, 2).toUpperCase();
 
   return (
     <div className="flex min-h-screen bg-[#f9f8f4] dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased transition-colors duration-300">
@@ -44,7 +55,9 @@ export default function Layout({ children }) {
           
           {/* Clean Navigation Tree */}
           <nav className="py-8 space-y-1.5">
-            {sidebarItems.map((item) => {
+            {sidebarItems
+              .filter((item) => !item.roles || (user && item.roles.includes(user.role)))
+              .map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               return (
@@ -68,12 +81,19 @@ export default function Layout({ children }) {
         {/* User Profile Footer Workspace */}
         <div className="pt-5 border-t border-zinc-200/80 dark:border-zinc-800/40 flex items-center gap-3.5 px-2">
           <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-700 dark:text-zinc-300 font-bold text-sm border border-zinc-200 dark:border-zinc-700">
-            DS
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">Dev Shah</p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-mono truncate">Procurement Officer</p>
+            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-200 truncate">{user?.email || 'Guest'}</p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-mono truncate capitalize">{user?.role || 'unknown'}</p>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:border-red-300 dark:hover:border-red-500/40 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </aside>
 

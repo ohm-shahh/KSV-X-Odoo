@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VendorBridge Login Test</title>
+  <style>
+    body {
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 20px;
+      font-family: Arial, sans-serif;
+      color: #1f2937;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+      padding: 24px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    input,
+    button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 6px;
+      color: white;
+      background: #2563eb;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    #status {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f3f4f6;
+    }
+
+    #status.success {
+      color: #166534;
+      background: #dcfce7;
+    }
+
+    #status.error {
+      color: #991b1b;
+      background: #fee2e2;
+    }
+  </style>
+</head>
+<body>
+  <h1>VendorBridge Login Test</h1>
+  <p>This form sends a JSON <strong>POST</strong> request to the login API.</p>
+
+  <form id="login-form">
+    <div>
+      <label for="email">Email</label>
+      <input
+        id="email"
+        type="email"
+        value="codex-test-1780741563@example.com"
+        required
+      >
+    </div>
+
+    <div>
+      <label for="password">Password</label>
+      <input
+        id="password"
+        type="password"
+        value="TestPassword123!"
+        required
+      >
+    </div>
+
+    <button id="submit-button" type="submit">Send POST login request</button>
+  </form>
+
+  <pre id="status">Ready to test.</pre>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const status = document.getElementById('status');
+    const submitButton = document.getElementById('submit-button');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      submitButton.disabled = true;
+      status.className = '';
+      status.textContent = 'Sending POST request...';
+
+      try {
+        const response = await fetch('../api/auth/login.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+          })
+        });
+
+        const result = await response.json();
+        status.className = response.ok ? 'success' : 'error';
+        status.textContent = JSON.stringify(result, null, 2);
+
+        if (response.ok && result.data?.token) {
+          localStorage.setItem('vendorbridge_token', result.data.token);
+        }
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = `Request failed: ${error.message}`;
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

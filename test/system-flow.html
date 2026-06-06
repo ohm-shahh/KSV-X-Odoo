@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VendorBridge System Flow Test</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Arial, sans-serif;
+      color: #172033;
+      background: #f5f7fb;
+    }
+
+    body {
+      max-width: 1050px;
+      margin: 36px auto;
+      padding: 0 20px 60px;
+    }
+
+    h1 {
+      margin-bottom: 6px;
+    }
+
+    .intro {
+      color: #526078;
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 7px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #run {
+      color: white;
+      background: #2457d6;
+    }
+
+    #clear {
+      color: #27344a;
+      background: #e4e9f2;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    #summary {
+      display: none;
+      margin-bottom: 18px;
+      padding: 16px;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    #summary.success {
+      display: block;
+      color: #176331;
+      background: #dcf8e6;
+    }
+
+    #summary.error {
+      display: block;
+      color: #991b1b;
+      background: #fee2e2;
+    }
+
+    #steps {
+      display: grid;
+      gap: 10px;
+    }
+
+    .step {
+      padding: 14px 16px;
+      border: 1px solid #dce2ec;
+      border-left: 5px solid #9aa6b8;
+      border-radius: 7px;
+      background: white;
+    }
+
+    .step.running {
+      border-left-color: #d69e24;
+    }
+
+    .step.success {
+      border-left-color: #22a05a;
+    }
+
+    .step.error {
+      border-left-color: #d13b3b;
+    }
+
+    .step-title {
+      font-weight: 700;
+    }
+
+    .step-detail {
+      margin-top: 7px;
+      color: #526078;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #e9edf5;
+    }
+  </style>
+</head>
+<body>
+  <h1>VendorBridge Complete System Test</h1>
+  <p class="intro">
+    This runs the main business flow through the real API:
+    users, vendor profile, RFQ, vendor assignment, quotation, manager approval,
+    purchase order, invoice, payment, and dashboard verification.
+  </p>
+
+  <div class="actions">
+    <button id="run" type="button">Run complete system flow</button>
+    <button id="clear" type="button">Clear results</button>
+  </div>
+
+  <div id="summary"></div>
+  <div id="steps"></div>
+
+  <script>
+    const runButton = document.getElementById('run');
+    const clearButton = document.getElementById('clear');
+    const summary = document.getElementById('summary');
+    const steps = document.getElementById('steps');
+
+    function addStep(title) {
+      const element = document.createElement('div');
+      element.className = 'step running';
+      element.innerHTML = `
+        <div class="step-title">${title}</div>
+        <div class="step-detail">Running...</div>
+      `;
+      steps.appendChild(element);
+      element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return element;
+    }
+
+    function finishStep(element, successful, detail) {
+      element.className = `step ${successful ? 'success' : 'error'}`;
+      element.querySelector('.step-detail').textContent = detail;
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(`../api/${path}`, {
+        method: options.method || 'GET',
+        headers: {
+          ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.token
+            ? { Authorization: `Bearer ${options.token}` }
+            : {})
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+
+      let result;
+
+      try {
+        result = await response.json();
+      } catch (error) {
+        throw new Error(`HTTP ${response.status}: Response was not JSON`);
+      }
+
+      if (!response.ok || result.success === false) {
+        const errors = result.errors
+          ? ` (${JSON.stringify(result.errors)})`
+          : '';
+        throw new Error(
+          `${result.message || `HTTP ${response.status}`}${errors}`
+        );
+      }
+
+      return result;
+    }
+
+    async function runStep(title, action) {
+      const element = addStep(title);
+
+      try {
+        const result = await action();
+        finishStep(element, true, result.detail || 'Passed');
+        return result.value;
+      } catch (error) {
+        finishStep(element, false, error.message);
+        throw error;
+      }
+    }
+
+    async function registerAndLogin(role, suffix) {
+      const email = `${role}.${suffix}@example.com`;
+      const password = 'SystemTest123!';
+
+      const registration = await api('auth/register.php', {
+        method: 'POST',
+        body: {
+          first_name: 'System',
+          last_name: role.charAt(0).toUpperCase() + role.slice(1),
+          email,
+          password,
+          role
+        }
+      });
+
+      const login = await api('auth/login.php', {
+        method: 'POST',
+        body: { email, password }
+      });
+
+      return {
+        id: Number(registration.data.user_id),
+        email,
+        token: login.data.token
+      };
+    }
+
+    function futureDate(days) {
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      return date.toISOString().slice(0, 10);
+    }
+
+    runButton.addEventListener('click', async () => {
+      steps.innerHTML = '';
+      summary.className = '';
+      summary.textContent = '';
+      runButton.disabled = true;
+
+      const suffix = Date.now();
+      const context = {};
+
+      try {
+        context.admin = await runStep(
+          '1. Register and login as administrator',
+          async () => {
+            const value = await registerAndLogin('admin', suffix);
+            return {
+              value,
+              detail: `Admin user ${value.id}: ${value.email}`
+            };
+          }
+        );
+
+        context.manager = await runStep(
+          '2. Register and login as manager',
+          async () => {
+            const value = await registerAndLogin('manager', suffix);
+            return {
+              value,
+              detail: `Manager user ${value.id}: ${value.email}`
+            };
+          }
+        );
+
+        context.vendorUser = await runStep(
+          '3. Register and login as vendor',
+          async () => {
+            const value = await registerAndLogin('vendor', suffix);
+            return {
+              value,
+              detail: `Vendor user ${value.id}: ${value.email}`
+            };
+          }
+        );
+
+        context.vendorId = await runStep(
+          '4. Create vendor company profile',
+          async () => {
+            const gstDigits = String(suffix).slice(-4);
+            const response = await api('vendors/create.php', {
+              method: 'POST',
+              token: context.admin.token,
+              body: {
+                user_id: context.vendorUser.id,
+                company_name: `System Test Supplies ${suffix}`,
+                gstin: `27ABCDE${gstDigits}F1Z5`,
+                category: 'Office Supplies',
+                contact_details: context.vendorUser.email
+              }
+            });
+
+            return {
+              value: Number(response.data.vendor_id),
+              detail: `Vendor profile ID: ${response.data.vendor_id}`
+            };
+          }
+        );
+
+        context.rfqId = await runStep(
+          '5. Create RFQ with two items',
+          async () => {
+            const response = await api('rfqs/create.php', {
+              method: 'POST',
+              token: context.admin.token,
+              body: {
+                title: `Office equipment test ${suffix}`,
+                category: 'Office Supplies',
+                deadline: futureDate(14),
+                description: 'Automated complete workflow test',
+                items: [
+                  { item_name: 'Laptop', quantity: 2 },
+                  { item_name: 'Monitor', quantity: 4 }
+                ]
+              }
+            });
+
+            return {
+              value: Number(response.data.rfq_id),
+              detail: `${response.data.rfq_number} (ID ${response.data.rfq_id})`
+            };
+          }
+        );
+
+        await runStep('6. Publish the RFQ', async () => {
+          await api(`rfqs/publish.php?id=${context.rfqId}`, {
+            method: 'POST',
+            token: context.admin.token
+          });
+          return { detail: `RFQ ${context.rfqId} is published` };
+        });
+
+        await runStep('7. Assign vendor to the RFQ', async () => {
+          await api('rfqs/assignVendors.php', {
+            method: 'POST',
+            token: context.admin.token,
+            body: {
+              rfq_id: context.rfqId,
+              vendor_ids: [context.vendorId]
+            }
+          });
+          return { detail: `Vendor ${context.vendorId} assigned` };
+        });
+
+        context.rfq = await runStep(
+          '8. Read RFQ details and item IDs',
+          async () => {
+            const response = await api(
+              `rfqs/details.php?id=${context.rfqId}`,
+              { token: context.vendorUser.token }
+            );
+            return {
+              value: response.data,
+              detail: response.data.items
+                .map((item) => `${item.id}: ${item.item_name} x ${item.quantity}`)
+                .join('\n')
+            };
+          }
+        );
+
+        context.quotationId = await runStep(
+          '9. Vendor submits quotation for manager review',
+          async () => {
+            const prices = {};
+            context.rfq.items.forEach((item, index) => {
+              prices[item.id] = index === 0 ? 45000 : 12000;
+            });
+
+            const response = await api('quotations/submit.php', {
+              method: 'POST',
+              token: context.vendorUser.token,
+              body: {
+                rfq_id: context.rfqId,
+                delivery_days: 10,
+                prices,
+                manager_id: context.manager.id,
+                note: 'System flow test quotation'
+              }
+            });
+
+            return {
+              value: Number(response.data.quotation_id),
+              detail:
+                `${response.data.quotation_number}\n` +
+                `Grand total: ${response.data.grand_total}`
+            };
+          }
+        );
+
+        await runStep('10. Manager sees pending approval', async () => {
+          const response = await api('approvals/pending.php', {
+            token: context.manager.token
+          });
+          const found = response.data.some(
+            (approval) =>
+              Number(approval.quotation_id) === context.quotationId
+          );
+
+          if (!found) {
+            throw new Error('Submitted quotation was not in pending approvals');
+          }
+
+          return {
+            detail: `Quotation ${context.quotationId} is pending manager review`
+          };
+        });
+
+        await runStep('11. Manager approves quotation', async () => {
+          await api('approvals/approve.php', {
+            method: 'POST',
+            token: context.manager.token,
+            body: {
+              quotation_id: context.quotationId,
+              level: 'L1_Review',
+              remarks: 'Approved by complete system test'
+            }
+          });
+          return { detail: `Quotation ${context.quotationId} approved` };
+        });
+
+        context.poId = await runStep(
+          '12. Generate purchase order',
+          async () => {
+            const response = await api('purchaseOrders/generate.php', {
+              method: 'POST',
+              token: context.admin.token,
+              body: { quotation_id: context.quotationId }
+            });
+            return {
+              value: Number(response.data.po_id),
+              detail: `${response.data.po_number} (ID ${response.data.po_id})`
+            };
+          }
+        );
+
+        context.invoiceId = await runStep(
+          '13. Generate invoice',
+          async () => {
+            const response = await api('invoices/generate.php', {
+              method: 'POST',
+              token: context.admin.token,
+              body: { quotation_id: context.quotationId }
+            });
+            return {
+              value: Number(response.data.invoice_id),
+              detail:
+                `${response.data.invoice_number} ` +
+                `(ID ${response.data.invoice_id})`
+            };
+          }
+        );
+
+        await runStep('14. Mark invoice as paid', async () => {
+          await api('invoices/markPaid.php', {
+            method: 'POST',
+            token: context.admin.token,
+            body: { invoice_id: context.invoiceId }
+          });
+          return { detail: `Invoice ${context.invoiceId} marked paid` };
+        });
+
+        await runStep('15. Verify final dashboard counts', async () => {
+          const response = await api('reports/dashboard.php', {
+            token: context.admin.token
+          });
+          return {
+            detail: JSON.stringify(response.data, null, 2)
+          };
+        });
+
+        summary.className = 'success';
+        summary.textContent =
+          `Complete system flow passed. RFQ ${context.rfqId}, ` +
+          `quotation ${context.quotationId}, PO ${context.poId}, ` +
+          `and invoice ${context.invoiceId} were created successfully.`;
+      } catch (error) {
+        summary.className = 'error';
+        summary.textContent = `System flow stopped: ${error.message}`;
+      } finally {
+        runButton.disabled = false;
+      }
+    });
+
+    clearButton.addEventListener('click', () => {
+      steps.innerHTML = '';
+      summary.className = '';
+      summary.textContent = '';
+    });
+  </script>
+</body>
+</html>
