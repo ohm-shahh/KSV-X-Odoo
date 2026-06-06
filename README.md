@@ -37,7 +37,7 @@ multi-level approvals, purchase orders, and invoices.
 
 - **Frontend:** React 19 · Vite · Tailwind CSS v4 · React Router · lucide-react
 - **Backend:** plain PHP 8 (no framework) · PDO · hand-rolled JWT
-- **Database:** MySQL / MariaDB (ships with XAMPP)
+- **Database:** MySQL(ships with XAMPP)
 
 ```
 React (Vite :5173)  ──►  PHP API (Apache :80)  ──►  MySQL (:3307)
