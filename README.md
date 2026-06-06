@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌉 VendorBridge
+# 🌉 KSV-X-ODOO
 
 ### _Enterprise Procurement Hub — from RFQ to Invoice, in one place._
 
